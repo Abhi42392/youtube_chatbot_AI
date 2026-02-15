@@ -11,6 +11,7 @@ from langchain_community.retrievers import PineconeHybridSearchRetriever
 from dotenv import load_dotenv
 from sentence_transformers import CrossEncoder
 import streamlit as st
+import cohere
 import os
 
 load_dotenv()
@@ -19,6 +20,7 @@ llm = HuggingFaceEndpoint(model="deepseek-ai/DeepSeek-V3.2", temperature=1.8)
 model = ChatHuggingFace(llm=llm)
 pc = Pinecone(api_key=os.environ["PINECONE_API_KEY"])
 cross_encoder = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+co=cohere.ClientV2(os.environ["COHERE_API_KEY"])
 
 
 def get_video_id(url: str) -> str | None:
@@ -31,34 +33,60 @@ def get_video_id(url: str) -> str | None:
 
 
 def get_context(retrieved_docs):
-    return "\n\n".join([doc.page_content for doc in retrieved_docs])
+    #Normal BM25 + dense score reranking technique
+    #--------------------------------------------------------------
+    # return "\n\n".join([doc.page_content for doc in retrieved_docs])
+    return "\n\n".join([doc for doc in retrieved_docs])
 
 def re_ranking_retriever(query):
     #initial records retrieved by retriever
-    intially_retrieved_docs=retriever.invoke(query)
+    intially_retrieved=retriever.invoke(query)
+    intially_retrieved_docs=[doc.page_content for doc in intially_retrieved if doc is not None]
     # print("Initially retrieved docs")
-    # for doc in intially_retrieved_docs:
-    #     print(doc.page_content)
-    #     print("----")
-    # print()
+    for doc in intially_retrieved_docs:
+        print(doc)
+        print("----")
+    print()
     #re-ranking the docs using cross encoder
-    pairs=[(query,doc.page_content) for doc in intially_retrieved_docs]
+    
+    #Normal BM25 + dense score reranking technique
+    #--------------------------------------------------------------
+    # pairs=[(query,doc) for doc in intially_retrieved_docs]
 
-    scores=cross_encoder.predict(pairs)
+    # scores=cross_encoder.predict(pairs)
 
-    re_ranked_docs=sorted(
-        zip(intially_retrieved_docs,scores),
-        key=lambda x:x[1],
-        reverse=True
-    )
+    # re_ranked_docs=sorted(
+    #     zip(intially_retrieved_docs,scores),
+    #     key=lambda x:x[1],
+    #     reverse=True
+    # )
     # print("Re-ranked docs")
     # for doc,score in re_ranked_docs:
     #     print(f"Score: {score}")
     #     print(doc.page_content)
     #     print("----")
-    re_ranked_docs=[doc for doc,score in re_ranked_docs]
+    # re_ranked_docs=[doc for doc,score in re_ranked_docs]
     
     # print()
+
+    #Reranking using cohere cross encoder
+    #--------------------------------------------------------------
+    print("Reranking with Cohere cross encoder...")
+    response=co.rerank(
+        model="rerank-v4.0-pro",
+        query=query,
+        documents=intially_retrieved_docs,
+        top_n=5
+    )
+    re_ranked_indices=[item.index for item in response.results]
+    re_ranked_docs=[intially_retrieved_docs[i] for i in re_ranked_indices]
+    for doc in re_ranked_docs:
+        print(doc)
+        print("----")
+
+    # for result in results.results:
+    #     print(result)
+    #     print("----")
 
     return re_ranked_docs
 
@@ -79,7 +107,7 @@ if url:
             with st.spinner("Processing video transcript..."):
                 # 1. Fetch transcript
                 ytt_api = YouTubeTranscriptApi()
-                transcript_arr = ytt_api.fetch(video_id, proxies={"https": "https://your-proxy-url:port"})
+                transcript_arr = ytt_api.fetch(video_id)
                 # transcript_arr = ytt_api.fetch(video_id)
                 transcript = " ".join([t.text for t in transcript_arr])
 
