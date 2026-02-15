@@ -79,7 +79,8 @@ if url:
             with st.spinner("Processing video transcript..."):
                 # 1. Fetch transcript
                 ytt_api = YouTubeTranscriptApi()
-                transcript_arr = ytt_api.fetch(video_id)
+                transcript_arr = ytt_api.fetch(video_id, proxies={"https": "https://your-proxy-url:port"})
+                # transcript_arr = ytt_api.fetch(video_id)
                 transcript = " ".join([t.text for t in transcript_arr])
 
                 # 2. Split into chunks
