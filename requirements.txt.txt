@@ -1,0 +1,10 @@
+youtube-transcript-api
+langchain-text-splitters
+langchain-huggingface
+langchain-core
+langchain-community
+pinecone-client
+pinecone-text
+python-dotenv
+sentence-transformers
+streamlit
